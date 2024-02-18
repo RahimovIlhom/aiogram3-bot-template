@@ -1,12 +1,10 @@
 import asyncio
 
 from aiogram import Router
-from aioredis import Redis
 
 from middlewares.throttling import ThrottlingMiddleware
 
 loop = asyncio.get_event_loop()
-redis_instance = Redis.from_url("redis://localhost", loop=loop)
-
+redis_url = "redis://localhost"  # Redis URL
 router = Router()
-router.message.middleware(ThrottlingMiddleware(redis_instance))
+router.message.middleware(ThrottlingMiddleware(redis_url))
