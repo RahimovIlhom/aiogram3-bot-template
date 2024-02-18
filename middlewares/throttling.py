@@ -1,22 +1,19 @@
-from __future__ import annotations
+import asyncio
+import time
+from typing import Any, Awaitable, Callable, Dict
 
-from typing import *
 from aiogram import BaseMiddleware
-from aiogram.client.session.middlewares.request_logging import logger
 from aiogram.dispatcher.event.bases import CancelHandler
 from aiogram.types import Message
-import time
-
-from aioredis import Redis
 
 
 class ThrottlingMiddleware(BaseMiddleware):
-    def __init__(self, redis: Redis, limit=.5, key_prefix='antiflood_'):
+    def __init__(self, redis, limit=.5, key_prefix='antiflood_'):
         self.rate_limit = limit
         self.prefix = key_prefix
         self.throttle_manager = ThrottleManager(redis=redis)
 
-        super(ThrottlingMiddleware, self).__init__()
+        super().__init__()
 
     async def __call__(
             self,
@@ -34,7 +31,8 @@ class ThrottlingMiddleware(BaseMiddleware):
         try:
             result = await handler(event, data)
         except Exception as e:
-            logger.exception(e)
+            # logger.exception(e) # You may uncomment this if logger is defined elsewhere
+            print(e)  # Temporary print for exception
         else:
             return result
 
@@ -56,8 +54,8 @@ class ThrottlingMiddleware(BaseMiddleware):
             # Cancel current handler
             raise CancelHandler()
 
-    async def event_throttled(self, event: Message, throttled: Throttled):
-        # Calculate how many time is left till the block ends
+    async def event_throttled(self, event: Message, throttled: 'Throttled'):
+        # Calculate how many times is left till the block ends
         delta = throttled.rate - throttled.delta
 
         # Prevent flooding
@@ -66,24 +64,20 @@ class ThrottlingMiddleware(BaseMiddleware):
 
 
 class ThrottleManager:
-    bucket_keys = [
-        "RATE_LIMIT", "DELTA",
-        "LAST_CALL", "EXCEEDED_COUNT"
-    ]
-
-    def __init__(self, redis: Redis):
+    def __init__(self, redis):
         self.redis = redis
 
     async def throttle(self, key: str, rate: float, user_id: int, chat_id: int):
         now = time.time()
         bucket_name = f'throttle_{key}_{user_id}_{chat_id}'
 
-        data = await self.redis.hmget(bucket_name, self.bucket_keys)
+        # Get data from redis
+        data = await self.redis.hmget(bucket_name, "RATE_LIMIT", "LAST_CALL", "EXCEEDED_COUNT", "DELTA")
         data = {
-            k: float(v.decode())
+            k.decode(): float(v.decode())
             if isinstance(v, bytes)
-            else v
-            for k, v in zip(self.bucket_keys, data)
+            else float(v)
+            for k, v in zip(["RATE_LIMIT", "LAST_CALL", "EXCEEDED_COUNT", "DELTA"], data)
             if v is not None
         }
 
@@ -101,7 +95,8 @@ class ThrottleManager:
         else:
             data["EXCEEDED_COUNT"] = 1
 
-        await self.redis.hmset(bucket_name, data)
+        # Save data to redis
+        await self.redis.hmset_dict(bucket_name, data)
 
         if not result:
             raise Throttled(key=key, chat=chat_id, user=user_id, **data)
