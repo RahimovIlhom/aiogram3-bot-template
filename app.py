@@ -2,8 +2,6 @@ import asyncio
 import logging
 import sys
 
-from aiogram import Bot
-
 from loader import dp, bot
 import middlewares, filters, handlers
 from utils.notify_admins import on_startup_notify

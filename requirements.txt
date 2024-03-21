@@ -1,2 +1,2 @@
 environs~=10.0.0
-aiogram~=3.3.0
+aiogram==3.4.1
